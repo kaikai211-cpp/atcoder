@@ -395,6 +395,8 @@ button{font:inherit;color:inherit}
 .file span{color:var(--muted);font-size:12px}
 .btn{border:1px solid var(--line);background:var(--key);border-radius:10px;padding:8px 11px;font-size:14px;cursor:pointer;white-space:nowrap}
 .top .btn{padding:7px 10px}
+a.btn{text-decoration:none;color:inherit;text-align:center;display:block}
+a.btn[hidden]{display:none}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
 .btn:focus-visible,.key:focus-visible,.file:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
@@ -509,14 +511,16 @@ button{font:inherit;color:inherit}
   <h2>ファイル</h2>
   <div class="list" id="fileList"></div>
   <button class="btn primary" id="newBtn" style="width:100%">新しいファイル</button>
-  <p class="note">ファイル名を「abc174_e」のように問題のIDにしておくと、メニューからその問題の提出ページとコードテストを開けます。</p>
+  <p class="note">新しいファイルを作るときに問題の URL（AtCoder か AOJ）を貼ると、名前と提出先が自動で決まります。あとからでも、メニューの「問題のURLを貼る」で決められます。</p>
 </section>
 
 <section class="sheet" id="menuSheet" hidden aria-label="メニュー">
-  <h2>AtCoder</h2>
+  <h2>問題</h2>
   <div class="grid">
-    <a class="btn" id="testLink" target="_blank" rel="noopener">コードテストを開く</a>
-    <a class="btn" id="submitLink" target="_blank" rel="noopener">提出ページを開く</a>
+    <button class="btn primary" id="urlBtn" style="grid-column:1/-1">問題のURLを貼る</button>
+    <a class="btn" id="probLink" target="_blank" rel="noopener">問題を開く</a>
+    <a class="btn" id="testLink" target="_blank" rel="noopener">コードテスト</a>
+    <a class="btn" id="submitLink" target="_blank" rel="noopener" style="grid-column:1/-1">提出</a>
   </div>
   <p class="note" id="linkNote">コードは「コピー」してから、開いたページに貼り付けてください。コードテストでは入力を入れて実行できます。</p>
   <h2>このファイル</h2>
@@ -576,7 +580,7 @@ let state;
 function load(){
   try{ const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.files && s.order && s.order.length) return s; }catch(e){}
   const id = uid();
-  return { files:{[id]:{name:"abc000_a", code:DEFAULT_TPL.replace(CUR,""), memo:"", t:Date.now(), pos:DEFAULT_TPL.indexOf(CUR)}}, order:[id], cur:id, tpl:DEFAULT_TPL, fs:15, theme:"" };
+  return { files:{[id]:{name:"新しいファイル", code:DEFAULT_TPL.replace(CUR,""), memo:"", t:Date.now(), pos:DEFAULT_TPL.indexOf(CUR)}}, order:[id], cur:id, tpl:DEFAULT_TPL, fs:15, theme:"" };
 }
 let saveTimer=null;
 function save(){ clearTimeout(saveTimer); saveTimer=setTimeout(()=>{ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){ toast("保存できませんでした（容量がいっぱいの可能性）"); } }, 300); }
@@ -819,10 +823,11 @@ document.getElementById("fileBtn").onclick = ()=>{ renderList(); openSheet("file
 document.getElementById("menuBtn").onclick = ()=>{ updateLinks(); openSheet("menuSheet"); };
 
 document.getElementById("newBtn").onclick = ()=>{
-  const name = (prompt("ファイル名（例：abc174_e）","")||"").trim();
-  if (!name) return;
+  const v = prompt("問題のページの URL を貼り付けてください（AtCoder か AOJ）。\nURL がなければ、ファイル名を入れてください。","");
+  if (v===null || !v.trim()) return;
   const id = uid();
-  state.files[id] = {name, code:state.tpl.replace(CUR,""), memo:"", t:Date.now(), pos:Math.max(0,state.tpl.indexOf(CUR))};
+  state.files[id] = {name:"新しいファイル", code:state.tpl.replace(CUR,""), memo:"", t:Date.now(), pos:Math.max(0,state.tpl.indexOf(CUR))};
+  if (parseUrl(v)) setUrl(v, state.files[id]); else state.files[id].name=v.trim();
   state.order.push(id); openFile(id); closeSheets();
   placeCursorAtMark();
 };
@@ -837,7 +842,7 @@ document.getElementById("renameBtn").onclick = ()=>{
 document.getElementById("deleteBtn").onclick = ()=>{
   if (!confirm(`「${cur().name}」を削除します。元に戻せません。`)) return;
   delete state.files[state.cur]; state.order = state.order.filter(i=>i!==state.cur);
-  if (!state.order.length){ const id=uid(); state.files[id]={name:"abc000_a",code:state.tpl.replace(CUR,""),memo:"",t:Date.now()}; state.order=[id]; }
+  if (!state.order.length){ const id=uid(); state.files[id]={name:"新しいファイル",code:state.tpl.replace(CUR,""),memo:"",t:Date.now()}; state.order=[id]; }
   openFile(state.order[state.order.length-1]); closeSheets(); toast("削除しました");
 };
 document.getElementById("resetBtn").onclick = ()=>{
@@ -860,24 +865,84 @@ document.getElementById("themeBtn").onclick=()=>{
   document.documentElement.setAttribute("data-theme", state.theme); save();
 };
 
-// ---------- AtCoder へのリンク ----------
+// ---------- 問題のURLと提出先（AtCoder / AOJ） ----------
+const ID_RE = /^([a-z0-9]+?)_([a-z0-9]+)$/;
+// URL から問題を読み取る。返り値 {site, id, contest?, url}
+function parseUrl(u){
+  u=(u||"").trim();
+  let m=u.match(/atcoder\.jp\/contests\/([^\/?#]+)\/tasks\/([^\/?#]+)/);
+  if (m) return {site:"atcoder", contest:m[1], id:m[2], url:`https://atcoder.jp/contests/${m[1]}/tasks/${m[2]}`};
+  m=u.match(/u-aizu\.ac\.jp\/onlinejudge\/description\.jsp\?id=([A-Za-z0-9_]+)/);
+  if (!m) m=u.match(/onlinejudge\.u-aizu\.ac\.jp\/[^?#]*?\/([A-Za-z0-9_]+)\/?(?:[?#].*)?$/);
+  if (m) return {site:"aoj", id:m[1], url:`https://onlinejudge.u-aizu.ac.jp/problems/${m[1]}`};
+  return null;
+}
+// 今のファイルの問題（URL があればそれ、なければファイル名が AtCoder の ID ならそれ）
+function curProblem(){
+  const f=cur();
+  if (f.url){ const p=parseUrl(f.url); if (p) return p; }
+  const n=f.name.trim().toLowerCase();
+  if (ID_RE.test(n) && !/^abc000_/.test(n)){ const c=n.match(ID_RE)[1]; return {site:"atcoder", contest:c, id:n, url:`https://atcoder.jp/contests/${c}/tasks/${n}`}; }
+  return null;
+}
 function updateLinks(){
-  const name = cur().name.trim().toLowerCase();
-  const m = name.match(/^([a-z0-9]+?)_([a-z0-9]+)$/);
-  const t = document.getElementById("testLink"), s = document.getElementById("submitLink"), note = document.getElementById("linkNote");
-  if (m){
-    const contest = m[1];
-    t.href = `https://atcoder.jp/contests/${contest}/custom_test`;
-    s.href = `https://atcoder.jp/contests/${contest}/submit?taskScreenName=${name}`;
-    t.removeAttribute("aria-disabled"); s.removeAttribute("aria-disabled"); t.style.opacity=s.style.opacity=1;
-    note.textContent = "コードは「コピー」してから、開いたページに貼り付けてください。コードテストでは入力を入れて実行できます。";
+  const p=curProblem();
+  const pl=document.getElementById("probLink"), t=document.getElementById("testLink"), s=document.getElementById("submitLink"), note=document.getElementById("linkNote"), ub=document.getElementById("urlBtn");
+  t.hidden=false;
+  if (!p){
+    pl.href=t.href=s.href="#";
+    pl.textContent="問題を開く"; t.textContent="コードテスト"; s.textContent="提出";
+    ub.textContent="問題のURLを貼る";
+    note.textContent="まだ問題が決まっていません。問題のページのURL（AtCoder か AOJ）を貼ってください。";
+    return;
+  }
+  ub.textContent="問題のURLを変える";
+  pl.href=p.url; pl.textContent="問題を開く";
+  if (p.site==="atcoder"){
+    t.href=`https://atcoder.jp/contests/${p.contest}/custom_test`;
+    s.href=`https://atcoder.jp/contests/${p.contest}/submit?taskScreenName=${p.id}`;
+    t.textContent="コードテスト"; s.textContent=`${p.id} を提出`;
+    note.textContent=`AtCoder ${p.id}。提出とコードテストは、押すとコードが自動でコピーされます。開いたページに貼り付けてください。`;
   } else {
-    t.href = "https://atcoder.jp/contests/practice/custom_test";
-    s.href = "https://atcoder.jp/contests/";
-    note.textContent = "ファイル名が「abc174_e」の形ではないので、練習用のコードテストとコンテスト一覧を開きます。";
+    t.hidden=true;
+    s.href=p.url; s.textContent=`${p.id} を提出（AOJ）`;
+    note.textContent=`AOJ ${p.id}。AOJ は問題のページの「Submit」から提出します。押すとコードが自動でコピーされるので、貼り付けてください。（AOJ には ACL がありません）`;
   }
 }
+async function copyCode(){
+  const text = cm.getValue();
+  try{ await navigator.clipboard.writeText(text); return true; }
+  catch(e){
+    const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select();
+    let ok=false; try{ ok=document.execCommand("copy"); }catch(_){}
+    ta.remove(); return ok;
+  }
+}
+// URL を設定。ファイル名が決まっていなければ問題の ID にする
+function setUrl(u, f){
+  f=f||cur();
+  const p=parseUrl(u);
+  if (!p){ alert("AtCoder か AOJ の問題のページの URL を貼ってください。\n例：https://atcoder.jp/contests/dp/tasks/dp_a"); return false; }
+  f.url=p.url;
+  if (!f.name || f.name==="新しいファイル" || /^abc000_/.test(f.name)) f.name=p.id;
+  if (f===cur()) document.getElementById("fileName").textContent=f.name;
+  updateLinks(); save(); return true;
+}
+function askUrl(){
+  const v=prompt("問題のページの URL を貼り付けてください（AtCoder か AOJ）", cur().url||"");
+  if (v===null || !v.trim()) return false;
+  if (setUrl(v)){ toast(`問題を「${curProblem().id}」にしました`); return true; }
+  return false;
+}
+document.getElementById("urlBtn").onclick=()=>askUrl();
+for (const id of ["probLink","testLink","submitLink"]){
+  document.getElementById(id).addEventListener("click", e=>{
+    if (!curProblem()){ e.preventDefault(); if (askUrl()) toast("問題を決めました。もう一度押してください"); return; }
+    if (id!=="probLink") copyCode().then(ok=>toast(ok?"コードをコピーしました。貼り付けてください":"コピーできませんでした"));
+  });
+}
 
+// ---------- コピー ----------
 // ---------- エラーの可能性を探す（コンパイラではない、簡易チェック） ----------
 function checkCode(src){
   const issues = [];
@@ -1016,15 +1081,7 @@ document.getElementById("saveBtn").addEventListener("pointerdown", e=>e.preventD
 document.getElementById("saveBtn").onclick=saveNow;
 
 // ---------- コピー ----------
-document.getElementById("copyBtn").onclick = async ()=>{
-  const text = cm.getValue();
-  try{ await navigator.clipboard.writeText(text); toast("コードをコピーしました"); }
-  catch(e){
-    const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select();
-    try{ document.execCommand("copy"); toast("コードをコピーしました"); }catch(_){ toast("コピーできませんでした"); }
-    ta.remove();
-  }
-};
+document.getElementById("copyBtn").onclick = async ()=>{ toast(await copyCode()?"コードをコピーしました":"コピーできませんでした"); };
 
 let toastTimer;
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),1800); }
