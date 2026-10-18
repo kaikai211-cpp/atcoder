@@ -1,7 +1,3 @@
-// 以下にテンプレートを公開しているwebページのURLを貼ります。
-// なお、webページ側にこの文章は入れておりません。
-// https://github.com/kaikai211-cpp/atcoder
-
 #include <bits/stdc++.h>
 #include <atcoder/segtree>
 using namespace std;
