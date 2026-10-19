@@ -146,18 +146,26 @@ inline ll mod_inv(ll a, ll mod)
 // -----------------------------------------------
 // 関数名: norm_MOD
 // 機　能: a を 0 以上 MOD 未満に直す
-// 引　数: a = 対象の数（負でもよい）
+// 引　数: a = 対象の数（負でも MOD 以上でもよい）
 // 戻り値: 0 以上 MOD 未満の値
+// 注　意: すでに 0 以上 MOD 未満なら % を使わずにそのまま返す（速い）
+//         % は足し算の数十倍重いので、整っていないときだけ使う
 // -----------------------------------------------
-inline ll norm_MOD(ll a) { return (a % MOD + MOD) % MOD; }
+inline ll norm_MOD(ll a)
+{
+    if (a < 0 || a >= MOD)
+        a = (a % MOD + MOD) % MOD;
+    return a;
+}
 
 // -----------------------------------------------
 // 関数名: add_MOD
 // 機　能: a + b を MOD で割った余りを求める
-// 引　数: a, b = 足す 2 つの数（負でもよい）
+// 引　数: a, b = 足す 2 つの数（負でも MOD 以上でもよい）
 // 戻り値: 0 以上 MOD 未満の値
+// 注　意: ふつう（0〜MOD-1 同士）は % を使わないので速い
 // -----------------------------------------------
-inline ll add_MOD(ll a, ll b) { return ((a + b) % MOD + MOD) % MOD; }
+inline ll add_MOD(ll a, ll b) { return norm_MOD(norm_MOD(a) + norm_MOD(b)); }
 
 // -----------------------------------------------
 // 関数名: sub_MOD
@@ -165,16 +173,18 @@ inline ll add_MOD(ll a, ll b) { return ((a + b) % MOD + MOD) % MOD; }
 // 引　数: a, b = 引く 2 つの数（負でもよい）
 // 戻り値: 0 以上 MOD 未満の値
 // 注　意: 生の (a - b) % MOD は負になり得る。必ずこちらを使う
+//         ふつう（0〜MOD-1 同士）は % を使わないので速い
 // -----------------------------------------------
-inline ll sub_MOD(ll a, ll b) { return ((a - b) % MOD + MOD) % MOD; }
+inline ll sub_MOD(ll a, ll b) { return norm_MOD(norm_MOD(a) - norm_MOD(b)); }
 
 // -----------------------------------------------
 // 関数名: mul_MOD
 // 機　能: a × b を MOD で割った余りを求める
-// 引　数: a, b = 掛ける 2 つの数（負でもよい）
+// 引　数: a, b = 掛ける 2 つの数（負でも MOD 以上でもよい）
 // 戻り値: 0 以上 MOD 未満の値
+// 注　意: ふつう（0〜MOD-1 同士）は % を1回しか使わないので速い
 // -----------------------------------------------
-inline ll mul_MOD(ll a, ll b) { return ((a % MOD) * (b % MOD) % MOD + MOD) % MOD; }
+inline ll mul_MOD(ll a, ll b) { return norm_MOD(a) * norm_MOD(b) % MOD; }
 
 // -----------------------------------------------
 // 関数名: div_MOD
@@ -837,15 +847,15 @@ inline vl napDP(vl dp, const vl &ws, ll mod, bool unlimited)
             for (ll s = b; s <= S; s++) // 昇順: 何個でも使える
             {
                 dp[s] += dp[s - b];
-                if (mod)
-                    dp[s] %= mod;
+                if (mod && dp[s] >= mod) // 超えたときだけ引く（% より速い）
+                    dp[s] -= mod;
             }
         else
             for (ll s = S; s >= b; s--) // 降順: 各品1回まで
             {
                 dp[s] += dp[s - b];
-                if (mod)
-                    dp[s] %= mod;
+                if (mod && dp[s] >= mod) // 超えたときだけ引く（% より速い）
+                    dp[s] -= mod;
             }
     }
     return dp;
